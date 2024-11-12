@@ -1,0 +1,195 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <string.h>
+#include <ctype.h>
+#include <errno.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/types.h>
+
+/*
+
+
+Sa se implementeze un prog C, folosind apeluri sistem ?i func?ii biblioteca ce se apeleazã sub forma  
+./executable file.
+
+Programul verifica faptul cã a primit un argument si este un fisier obisnuit; în caz contrar, afi?eazã un mesaj de 
+eroare ce indica utilizarea corectã.
+
+Procesul pãrinte creeazã 3 procese fiu.
+
+Primul proces fiu trimite con?inutul fi?ierului <file> cãtre fiul 2. Fiul 2 prime?te con?inutul fi?ierului ?i filtreazã 
+doar acele linii care NU încep cu ‘<!’ (comentarii in html).
+
+Fiul 1 ?i fiul 2 lanseazã OBLIGATORIU în execu?ie comenzi.
+
+Fiul 3 prime?te liniile filtrate ?i parseaza con?inutul numarand cate tag-uri deschise (‘<’)  ?i câte tag-uri închise 
+(‘>’) sunt în fi?ier. Se va face diferenta celor doua rezultate ?i se va trimite rezultatul printr-un pipe pãrintelui. 
+
+
+Pãrintele afi?eazã o data la o secundã mesajul “Html file is în process…”  ?i la terminare fiilor afi?a un mesaj 
+corespunzãtor în func?ie de rezultatul primit. Dacã diferen?a e mai mare ca 0 se va afi?a “Tagurile nu sunt închise 
+corect!” ?i în caz contrar, “Toate tag-urile html sunt închise!”.
+
+La terminarea procesului fiu, pãrintele va afi?a pe ecran un mesaj de forma "Procesul fiu cu PID-ul <PID> s-a terminat cu 
+codul <cod>".
+ 
+!!! Procesul fiu ?i procesul pãrinte vor rula obligatoriu în paralel.
+Se vor trata cazurile de eroare pentru apelurile sistem folosite.
+Func?iile de biblioteca permise sunt DOAR pentru formatãri (printf).
+ 
+
+Criterii minimale:
+
+ Crearea corecta a unui proces fiu si preluarea starii acestuia 
+ Crearea oportuna a cel putin unui pipe
+ Comunicare prin pipe intre 2 procese care fac o transmitere si o receptie corecte prin pipe, in scopuri cerute de enunt 
+Redirectarea corecta a descriptorilor si apelarea exec (toate subiectele vor cere folosirea unei comenzi externe) 
+Afisarea rezultatelor -> Dovada clara ca programul tinteste scopul cerut si necesita argumentele specificate (verificarea
+numarului de argumente, indicand modul corect de apelare, o afisare a unui rezultat cerut sau macar o incercare credibila 
+in acest scop)
+*/
+int temp=0;
+void child1(int pipe,char name[]){
+    char buff=(char)calloc(10,sizeof (char));
+    if(!buff){printf("Buffer error\n");
+    exit(20);
+    }
+    int reader;
+    int fd;
+    if((fd=open(name,O_RDONLY))<0){
+        printf("Error open file\n");
+        exit(21);
+    }
+    while((reader=read(fd,(void*)buff,10))>0)
+        write(pipe,buff,reader);
+    close(pipe);
+    free(buff);
+}
+void child2(int pipe1,int pipe2){
+      dup2(pipe1,0);
+      dup2(pipe2,1);
+      close(pipe1);
+      close(pipe2);
+      execlp("grep","grep","-v","^<!",(char*)NULL);
+      perror("Error execlp\n");
+      exit(2);
+}
+void child3(int pipe){
+   int reader=0;
+    char buff=(char)calloc(10,sizeof (char));
+    if(!buff){printf("Buffer error\n");
+        exit(20);
+    }
+    int count1=0,count2=0;
+   while((reader=read(pipe,(void*)buff,10))>0){
+       for(int i=0;i<reader;i++){
+           if(buff[i]=='<'){
+               count1++;
+           }
+           if(buff[i]=='>'){
+               count2++;
+           }
+       }
+   }
+   printf("count1: %d\n",count1);
+   printf("count2: %d\n",count2);
+   if(count1==count2){
+       printf("Tagurile sunt închise corect!\n");
+   }else{
+       printf("Tagurile nu sunt închise corect!\n");
+   }
+   close(pipe);
+   exit(3);
+}
+
+void child_end(){
+    int pid_fiu;
+    ++temp;
+    int status;
+    if((pid_fiu=wait(&status))<0){
+        perror("Error wait");
+        exit(-4);
+    }
+    if(WIFEXITED(status)){
+        printf("S-a incheiat procesul fiu %d avand codul %d\n", pid_fiu, WEXITSTATUS(status));
+    }
+    else{
+        printf("Eroare WIFEXITED %d\n",pid_fiu);
+        exit(-4);
+    }
+    if(temp==3){
+        printf("Ura\n");
+        exit(0);
+    }
+}
+
+int main(int argc,char*argv[]){
+    if(argc!=2){
+        printf("Usage %s file_name\n",argv[0]);
+        exit(10);
+    }
+    int fpd1[2],fpd2[2];
+    int pid1,pid2,pid3;
+    if(pipe(fpd1)<0 || pipe(fpd2)<0){
+        printf("Error pipe\n");
+        exit(11);
+    }
+    //child1
+    if((pid1=fork())<0){
+        printf("Error fork");
+        exit(9);
+    }
+    if(pid1==0){
+        close(fpd2[1]);
+        close(fpd2[0]);
+        close(fpd1[0]);
+        child1(fpd1[1],argv[1]);
+        exit(1);
+    }
+    //child2
+    if((pid2=fork())<0){
+        printf("Error fork\n");
+        exit(9);
+    }
+    if(pid2==0){
+        sleep(2);
+        close(fpd2[0]);
+        close(fpd1[1]);
+        char buff=(char)calloc(10,sizeof(char));
+        int reader;
+       child2(fpd1[0],fpd2[1]);
+        exit(2);
+    }
+
+    //child3
+   if((pid3=fork())<0){
+        printf("Error fork");
+        exit(9);
+    }
+    if(pid3==0){
+        sleep(6);
+        close(fpd2[1]);
+        close(fpd1[0]);
+        close(fpd1[1]);
+        child3(fpd2[0]);
+        exit(3);
+    }
+    //the father
+    close(fpd2[1]);
+    close(fpd2[0]);
+    close(fpd1[0]);
+    close(fpd1[1]);
+    struct sigaction action;
+    memset(&action,0x00,sizeof(struct sigaction));
+    action.sa_flags=0;
+    action.sa_handler=child_end;
+    if(sigaction(SIGCHLD,&action,NULL)<0){
+        perror("Error SIGCHLD\n");
+        exit(-1);
+    }
+    while(1);
+    exit(0);
+}

@@ -1,0 +1,102 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <fcntl.h>
+
+//mai trebuie verificate unele erori
+
+int main(int argc, char* argv[]) {
+    int des[2];
+    pid_t pid;
+    char* buffer = (char*)calloc(20, sizeof(char));  
+      if(!buffer) {
+            printf("Memoria pentru buffer nu a fost alocata corespunzator\n");
+            exit(-6);
+        }
+
+    if(argc < 2) {
+        prerror("Numarul de argumente nu corespunde cerintei\n");
+        exit(Exit);
+    }
+    
+    /*nu s-a cerut dar putem face:
+    struct stat stats;
+    
+     if(stat(argv[1], &path_stat)<0)
+	{
+		prerror("Eroare la stat");
+		exit(-9);
+	}
+
+    if(!S_ISREG(stats.st_mode)<=0) {
+        printf("Argumentul primit nu este fisier");
+        exit(-8);
+    }
+    */
+    if(pipe(des) < 0) {
+        perror("Pipe: ");
+        exit(-1);
+    }
+
+    if(pid = fork()<0);
+    {
+        perror("Fork: ");
+        exit(-2);
+    }
+
+    if(pid==0) {
+        close(des[1]);
+        int counter = 0, reader;
+ 
+	char* read1; 
+
+        close(des[1]);
+        read1 = read(des[0], (void*)buffer, sizeof(char)));
+        close(des[0]);        	
+	
+	free(buffer);
+	char *p = malloc(sizeof(char));
+	*p=read1;
+	write(des[0],p,sizeof(char));
+        execlp("grep","grep","^[A-Z]{1}",des[0],NULL)>des[0];
+	//cred ca redirecatrea suprascrie ce a fost scris in pipe alfel nu stiu cum sa fac
+	//sau trebuia exec nu execlp ?
+	
+	//de facut de trimis semnal de la copil la parinte in caz de eorare 
+	//pentru pid in caz de eroare	
+    }
+	
+    close(des[0]);
+    int fd = open(argv[1], O_RDONLY);
+    
+    if(fd < 0) {
+        perror("Open: ");
+        exit(-4);
+    }
+
+    int reader, writer,w;
+    char *read2
+
+    while((reader = read(fd, (void*)buffer, sizeof(char))) > 0)
+        writer = write(des[1], buffer, reader);
+
+    
+    close(des[0]);
+    read2 = read(des[1], (void*)buffer, sizeof(char)));
+    for(int i=0;i<strlen(read2);i++)
+    if(read2[i]>'A'&&read2[i]<'Z')
+	w++;
+    //de tratat terminarea in cazul de eroare al fiului
+    //la cazurile lui de eroare sa trimita un sigusr ?    	
+
+    free(buffer);
+    close(fd);
+    close(des[1]);
+    /* nu se cere dar am putea face:
+    int status;
+    wait(&status);
+    printf("Numarul de litere mari procesate: %d\n", WEXITSTATUS(status));
+    */
+}
